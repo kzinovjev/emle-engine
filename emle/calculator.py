@@ -646,8 +646,11 @@ class EMLECalculator:
                     self._ani2x_model_index = ani2x_model_index
 
                 # Initialise the MACEMLE model.
-                elif backend == "mace":
-                    from .models import MACEEMLE as _MACEEMLE
+                elif backend in ["mace", "maceemle"]:
+                    if backend == "mace":
+                        from .models import MACEEMLE as _MACEEMLE
+                    else:
+                        from .models import MACEEMLEJoint as _MACEEMLE
 
                     mace_emle = _MACEEMLE(
                         emle_model=model,

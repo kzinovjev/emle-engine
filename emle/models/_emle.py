@@ -32,9 +32,10 @@ import os as _os
 import scipy.io as _scipy_io
 import torch as _torch
 import torchani as _torchani
+from emle.models import EMLEBase
 
 from torch import Tensor
-from typing import Union
+from typing import Union, Optional, Dict
 
 from . import _patches
 from . import EMLEBase as _EMLEBase
@@ -418,6 +419,7 @@ class EMLE(_torch.nn.Module):
         xyz_qm: Tensor,
         xyz_mm: Tensor,
         qm_charge: Union[int, Tensor] = 0,
+        external_params: Optional[Dict[str, Tensor]] = None,
     ) -> Tensor:
         """
         Computes the static and induced EMLE energy components.
@@ -479,18 +481,34 @@ class EMLE(_torch.nn.Module):
                 2, batch_size, dtype=self._xyz_qm.dtype, device=self._xyz_qm.device
             )
 
+        ANGSTROM_TO_BOHR = 1.8897261258369282
         # Get the parameters from the base model:
         #    valence widths, core charges, valence charges, A_thole tensor
         # These are returned as batched tensors, so we need to extract the
         # first element of each.
-        s, q_core, q_val, A_thole = self._emle_base(
-            self._atomic_numbers,
-            self._xyz_qm,
-            qm_charge,
-        )
+        if external_params is not None:
+            s = external_params['s']
+            q_core = external_params['q_core']
+            q_val = external_params['q_val']
+
+            xyz_qm_bohr = self._xyz_qm * ANGSTROM_TO_BOHR
+            mask = atomic_numbers > 0
+
+            species_id = self._emle_base._species_map[atomic_numbers]
+            k = external_params['k_Z'][species_id]
+
+            r_data = self._emle_base._get_r_data(xyz_qm_bohr, mask)
+            A_thole = self._emle_base._get_A_thole(r_data, s, q_val,
+                                                   k,
+                                                   external_params['a_Thole'])
+        else:
+            s, q_core, q_val, A_thole = self._emle_base(
+                self._atomic_numbers,
+                self._xyz_qm,
+                qm_charge,
+            )
 
         # Convert coordinates to Bohr.
-        ANGSTROM_TO_BOHR = 1.8897261258369282
         xyz_qm_bohr = self._xyz_qm * ANGSTROM_TO_BOHR
         xyz_mm_bohr = self._xyz_mm * ANGSTROM_TO_BOHR
 

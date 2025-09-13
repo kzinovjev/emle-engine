@@ -36,6 +36,7 @@ molecular systems.
 _supported_backends = [
     "torchani",
     "mace",
+    "maceemle",
     "ace",
     "deepmd",
     "orca",
