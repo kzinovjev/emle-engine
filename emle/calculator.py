@@ -1323,7 +1323,8 @@ class EMLECalculator:
 
                 grad_qm = grad_vac + dE_dxyz_qm.cpu().numpy() * _BOHR_TO_ANGSTROM
                 grad_mm = dE_dxyz_mm.cpu().numpy() * _BOHR_TO_ANGSTROM
-                E_tot = E_vac + E.sum().detach().cpu().numpy()
+                E_vac, E_static, E_induced = E.sum(axis=1).detach().cpu().numpy()
+                E_tot = E_vac + E_static + E_induced
 
             except Exception as e:
                 msg = f"Failed to compute {model} energies and gradients: {e}"
