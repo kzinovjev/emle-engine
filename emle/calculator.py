@@ -80,6 +80,7 @@ class EMLECalculator:
         model=None,
         method="electrostatic",
         alpha_mode="species",
+        use_dipoles=False,
         atomic_numbers=None,
         qm_charge=0,
         backend="torchani",
@@ -153,6 +154,9 @@ class EMLECalculator:
                 "reference":
                     scaling factors are obtained with GPR using the values learned
                     for each reference environment
+
+        use_dipoles: bool
+            Whether static atomic dipoles should be used
 
         atomic_numbers: List[int], Tuple[int], numpy.ndarray
             Atomic numbers for the QM region. This allows use of optimised AEV
@@ -507,6 +511,16 @@ class EMLECalculator:
         else:
             self._backend = None
 
+        if use_dipoles:
+            for backend in formatted_backends:
+                if backend != 'maceemle':
+                    msg = f"Static dipoles can only be used with maceemle backend"
+                    _logger.error(msg)
+                    raise ValueError(msg)
+
+        self.use_dipoles = use_dipoles
+
+
         # Validate the external backend.
         if external_backend is not None:
             if not isinstance(external_backend, str):
@@ -649,19 +663,29 @@ class EMLECalculator:
                 elif backend in ["mace", "maceemle"]:
                     if backend == "mace":
                         from .models import MACEEMLE as _MACEEMLE
+                        mace_emle = _MACEEMLE(
+                            emle_model=model,
+                            emle_method=method,
+                            alpha_mode=alpha_mode,
+                            mm_charges=self._mm_charges,
+                            qm_charge=self._qm_charge,
+                            mace_model=mace_model,
+                            atomic_numbers=atomic_numbers,
+                            device=self._device,
+                        )
                     else:
                         from .models import MACEEMLEJoint as _MACEEMLE
-
-                    mace_emle = _MACEEMLE(
-                        emle_model=model,
-                        emle_method=method,
-                        alpha_mode=alpha_mode,
-                        mm_charges=self._mm_charges,
-                        qm_charge=self._qm_charge,
-                        mace_model=mace_model,
-                        atomic_numbers=atomic_numbers,
-                        device=self._device,
-                    )
+                        mace_emle = _MACEEMLE(
+                            emle_model=model,
+                            emle_method=method,
+                            alpha_mode=alpha_mode,
+                            use_dipoles=self.use_dipoles,
+                            mm_charges=self._mm_charges,
+                            qm_charge=self._qm_charge,
+                            mace_model=mace_model,
+                            atomic_numbers=atomic_numbers,
+                            device=self._device,
+                        )
 
                     # Convert to TorchScript.
                     b = _torch.jit.script(mace_emle).eval()

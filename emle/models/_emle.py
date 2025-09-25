@@ -490,6 +490,7 @@ class EMLE(_torch.nn.Module):
             s = external_params['s']
             q_core = external_params['q_core']
             q_val = external_params['q_val']
+            mu = external_params.get('mu')
 
             xyz_qm_bohr = self._xyz_qm * ANGSTROM_TO_BOHR
             mask = atomic_numbers > 0
@@ -507,6 +508,7 @@ class EMLE(_torch.nn.Module):
                 self._xyz_qm,
                 qm_charge,
             )
+            mu = None
 
         # Convert coordinates to Bohr.
         xyz_qm_bohr = self._xyz_qm * ANGSTROM_TO_BOHR
@@ -528,7 +530,7 @@ class EMLE(_torch.nn.Module):
                 q_core, dtype=self._charges_mm.dtype, device=self._device
             )
         E_static = self._emle_base.get_static_energy(
-            q_core, q_val, self._charges_mm, mesh_data
+            q_core, q_val, self._charges_mm, mesh_data, mu
         )
 
         # Compute the induced energy.

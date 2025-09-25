@@ -32,7 +32,7 @@ import numpy as _np
 import torch as _torch
 
 from torch import Tensor
-from typing import Tuple
+from typing import Tuple, Optional
 
 import torchani as _torchani
 
@@ -790,6 +790,7 @@ class EMLEBase(_torch.nn.Module):
         q_val: Tensor,
         charges_mm: Tensor,
         mesh_data: Tuple[Tensor, Tensor, Tensor],
+        mu: Optional[Tensor] = None
     ) -> Tensor:
         """
         Calculate the static electrostatic energy.
@@ -809,6 +810,12 @@ class EMLEBase(_torch.nn.Module):
         mesh_data: mesh_data object (output of self._get_mesh_data)
             Mesh data object.
 
+        q_val: torch.Tensor (N_BATCH, N_QM_ATOMS,)
+            QM valence charges.
+
+        mu: Optional[torch.Tensor] (N_BATCH, N_QM_ATOMS,)
+            QM static atomic dipoles.
+
         Returns
         -------
 
@@ -819,6 +826,9 @@ class EMLEBase(_torch.nn.Module):
         vpot_q_core = EMLEBase._get_vpot_q(q_core, mesh_data[0])
         vpot_q_val = EMLEBase._get_vpot_q(q_val, mesh_data[1])
         vpot_static = vpot_q_core + vpot_q_val
+        if mu is not None:
+            vpot_mu = EMLEBase._get_vpot_mu(mu, mesh_data[2])
+            vpot_static += vpot_mu
         return _torch.sum(vpot_static * charges_mm, dim=1)
 
     @staticmethod

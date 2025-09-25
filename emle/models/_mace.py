@@ -618,6 +618,7 @@ class MACEEMLEJoint(_torch.nn.Module):
             qm_charge=0,
             mace_model=None,
             atomic_numbers=None,
+            use_dipoles=False,
             device=None,
             dtype=None,
     ):
@@ -811,6 +812,8 @@ class MACEEMLEJoint(_torch.nn.Module):
 
         # Set the _get_neighbor_pairs method on the instance.
         self._get_neighbor_pairs = _get_neighbor_pairs
+
+        self.use_dipoles = use_dipoles
 
     @staticmethod
     def _load_mace_model(mace_model: str, device: _torch.device):
@@ -1100,16 +1103,18 @@ class MACEEMLEJoint(_torch.nn.Module):
             s = output["valence_widths"]
             q_core = output["core_charges"]
             q = output["charges"]
+            mu = output["atomic_dipoles"]
 
             assert s is not None
             assert q_core is not None
             assert q is not None
+            assert mu is not None
 
             s = s.view(1, -1)
             q_core = q_core.view(1, -1)
             q = q.view(1, -1)
             q_val = q - q_core
-            # mu = output["atomic_dipoles"]
+            mu = mu.view(1, -1, 3) if self.use_dipoles else None
 
             assert (
                     E_vac is not None
@@ -1149,6 +1154,8 @@ class MACEEMLEJoint(_torch.nn.Module):
                                    'q_val': q_val,
                                    'a_Thole': self._mace.a_Thole,
                                    'k_Z': self._mace.elements_alpha_v_ratios}
+                if mu is not None:
+                    external_params['mu'] = mu
                 # Get the EMLE energy components.
                 E_emle = self._emle(
                     atomic_numbers, charges_mm, xyz_qm, xyz_mm, qm_charge, external_params
