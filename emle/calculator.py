@@ -1133,8 +1133,9 @@ class EMLECalculator:
         # Write out the QM region to the xyz trajectory file.
         if self._qm_xyz_frequency > 0 and self._step % self._qm_xyz_frequency == 0:
             atoms = _ase.Atoms(positions=xyz_qm, numbers=atomic_numbers)
+            atoms.info['total_charge'] = charge
             if hasattr(self._backend, "_max_f_std"):
-                atoms.info = {"max_f_std": self._max_f_std}
+                atoms.info['max_f_std'] = self._max_f_std
             if getattr(self._backends[0], "emle_values", None) is not None:
                 for key, value in self._backends[0].emle_values.items():
                     atoms.arrays[key] = value.detach().cpu().numpy()
