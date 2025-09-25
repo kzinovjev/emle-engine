@@ -769,6 +769,10 @@ class MACEEMLEJoint(_torch.nn.Module):
         self._E_vac_qbc = _torch.empty(0, dtype=self._dtype)
         self._grads_qbc = _torch.empty(0, dtype=self._dtype)
 
+        self.emle_values = {'s': _torch.empty(0, dtype=self._dtype),
+                            'q_core': _torch.empty(0, dtype=self._dtype),
+                            'q': _torch.empty(0, dtype=self._dtype)}
+
         # Create the z_table of the MACE model.
         self._z_table = [int(z.item()) for z in self._mace.atomic_numbers]
         self._r_max = self._mace.r_max.item()
@@ -1109,6 +1113,9 @@ class MACEEMLEJoint(_torch.nn.Module):
             assert q_core is not None
             assert q is not None
             assert mu is not None
+
+            # Store to be included in qm.xyz
+            self.emle_values.update({'s': s, 'q_core': q_core, 'q': q})
 
             s = s.view(1, -1)
             q_core = q_core.view(1, -1)

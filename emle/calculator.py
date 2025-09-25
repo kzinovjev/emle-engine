@@ -1135,6 +1135,9 @@ class EMLECalculator:
             atoms = _ase.Atoms(positions=xyz_qm, numbers=atomic_numbers)
             if hasattr(self._backend, "_max_f_std"):
                 atoms.info = {"max_f_std": self._max_f_std}
+            if getattr(self._backends[0], "emle_values", None) is not None:
+                for key, value in self._backends[0].emle_values.items():
+                    atoms.arrays[key] = value.detach().cpu().numpy()
             _ase_io.write(self._qm_xyz_file, atoms, append=True)
 
             pc_data = _np.hstack((charges_mm[:, None], xyz_mm))
@@ -1563,7 +1566,7 @@ class EMLECalculator:
                         f"{self._step:>10}{lam:22.12f}{E_tot:22.12f}{E_mm:22.12f}{E_emle:22.12f}\n"
                     )
                 else:
-                    f.write(f"{self._step:>10}{E_vac:22.12f}{E_tot:22.12f}\n")
+                    f.write(f"{self._step:>10}{E_vac:22.12f}{E_tot:22.12self._backends[0].emle_valuesf}\n")
 
         # Increment the step counter.
         if self._is_first_step:
