@@ -771,7 +771,8 @@ class MACEEMLEJoint(_torch.nn.Module):
 
         self.emle_values = {'s': _torch.empty(0, dtype=self._dtype),
                             'q_core': _torch.empty(0, dtype=self._dtype),
-                            'q': _torch.empty(0, dtype=self._dtype)}
+                            'q': _torch.empty(0, dtype=self._dtype),
+                            'mu': _torch.empty(0, dtype=self._dtype)}
 
         # Create the z_table of the MACE model.
         self._z_table = [int(z.item()) for z in self._mace.atomic_numbers]
@@ -1115,7 +1116,7 @@ class MACEEMLEJoint(_torch.nn.Module):
             assert mu is not None
 
             # Store to be included in qm.xyz
-            self.emle_values.update({'s': s, 'q_core': q_core, 'q': q})
+            self.emle_values.update({'s': s, 'q_core': q_core, 'q': q, 'mu': mu})
 
             s = s.view(1, -1)
             q_core = q_core.view(1, -1)
