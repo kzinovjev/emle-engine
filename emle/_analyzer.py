@@ -49,6 +49,7 @@ class EMLEAnalyzer:
         backend=None,
         parser=None,
         q_total=None,
+        use_dipoles=False,
         start=None,
         end=None
     ):
@@ -122,7 +123,6 @@ class EMLEAnalyzer:
         except Exception as e:
             raise RuntimeError(f"Unable to parse PC xyz file: {e}")
 
-
         if parser:
             self.q_total = _torch.sum(
                 _torch.tensor(
@@ -169,7 +169,9 @@ class EMLEAnalyzer:
         if isinstance(backend, MACEEMLEJoint):
             self.s = _torch.stack(backend.emle_values['s'])
             self.q_core = _torch.stack(backend.emle_values['q_core'])
-            self.q_val = _torch.stack(backend.emle_values['q']) - self.q_core
+            self.q = _torch.stack(backend.emle_values['q'])
+            self.q_val = self.q - self.q_core
+            self.mu = _torch.stack(backend.emle_values['mu'])
 
             a_Thole = backend._mace.a_Thole
             species_id = emle_base._species_map[self.atomic_numbers]
@@ -195,6 +197,13 @@ class EMLEAnalyzer:
             )
             * _HARTREE_TO_KCAL_MOL
         )
+        if use_dipoles:
+            self.e_static_mu = (
+                    emle_base.get_static_energy(
+                        self.q_core, self.q_val, self.pc_charges, mesh_data, self.mu
+                    )
+                    * _HARTREE_TO_KCAL_MOL
+            )
         self.e_induced = (
             emle_base.get_induced_energy(
                 self.A_thole, self.pc_charges, self.s, mesh_data, mask
@@ -219,11 +228,14 @@ class EMLEAnalyzer:
             "s",
             "q_core",
             "q_val",
+            "q",
+            "mu",
             "q_total",
             "atomic_alpha",
             "alpha",
             "e_backend",
             "e_static",
+            "e_static_mu",
             "e_induced",
             "e_static_mbis",
         ):

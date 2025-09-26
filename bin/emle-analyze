@@ -76,6 +76,11 @@ parser.add_argument(
     help="Total charge of the QM region",
 )
 parser.add_argument(
+    "--use-dipoles",
+    action="store_true",
+    help="Whether to include static atomic dipoles",
+)
+parser.add_argument(
     "--start",
     type=int,
     help="Structure index to start parsing",
@@ -98,7 +103,7 @@ from emle._orca_parser import ORCAParser
 if args.backend == "deepmd" and not args.deepmd_model:
     parser.error("--deepmd-model is required when backend='deepmd'")
 if args.backend == "mace" and not args.mace_model:
-    parser.error("--mace-model is required when backend='mace'")
+    parser.error("--mace-model is required when backend is 'mace' or 'maceemle'")
 
 backend = None
 if args.backend == "torchani":
@@ -132,7 +137,7 @@ if args.orca_tarball:
     orca_parser = ORCAParser(args.orca_tarball, decompose=True, alpha=args.alpha)
 
 analyzer = EMLEAnalyzer(args.qm_xyz, args.pc_xyz, emle_base, backend, orca_parser,
-                        args.q_total, start=args.start, end=args.end)
+                        args.q_total, args.use_dipoles, start=args.start, end=args.end)
 
 result = {
     "z": analyzer.atomic_numbers,
@@ -145,6 +150,9 @@ result = {
     "atomic_alpha_emle": analyzer.atomic_alpha,
     "alpha_emle": analyzer.alpha,
 }
+if args.use_dipoles:
+    result["mu_emle"] = analyzer.mu
+    result["E_static_mu_emle"] = analyzer.e_static_mu
 
 if orca_parser:
     result.update({
@@ -158,6 +166,8 @@ if orca_parser:
         "q_val_qm": orca_parser.mbis["q_val"],
         "E_static_mbis": analyzer.e_static_mbis,
     })
+    if args.use_dipoles:
+        result['mu_qm'] = orca_parser.mbis["mu"]
 
 if args.backend:
     result["E_vac_emle"] = analyzer.e_backend
