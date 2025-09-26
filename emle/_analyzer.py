@@ -33,6 +33,7 @@ import torch as _torch
 
 from ._units import _HARTREE_TO_KCAL_MOL, _ANGSTROM_TO_BOHR
 from ._utils import pad_to_max as _pad_to_max
+from .models import MACEEMLEJoint
 
 
 class EMLEAnalyzer:
@@ -161,14 +162,28 @@ class EMLEAnalyzer:
         self.pc_charges = _torch.tensor(pc_charges, dtype=dtype, device=device)
         self.pc_xyz = _torch.tensor(pc_xyz, dtype=dtype, device=device)
 
+        # TODO: naming differs from EMLE.forward, unify
         qm_xyz_bohr = self.qm_xyz * _ANGSTROM_TO_BOHR
         pc_xyz_bohr = self.pc_xyz * _ANGSTROM_TO_BOHR
 
-        self.s, self.q_core, self.q_val, self.A_thole = emle_base(
-            self.atomic_numbers,
-            self.qm_xyz,
-            self.q_total,
-        )
+        if isinstance(backend, MACEEMLEJoint):
+            self.s = _torch.stack(backend.emle_values['s'])
+            self.q_core = _torch.stack(backend.emle_values['q_core'])
+            self.q_val = _torch.stack(backend.emle_values['q']) - self.q_core
+
+            a_Thole = backend._mace.a_Thole
+            species_id = emle_base._species_map[self.atomic_numbers]
+            k = backend._mace.elements_alpha_v_ratios[species_id]
+            r_data = emle_base._get_r_data(qm_xyz_bohr, atomic_numbers > 0)
+            self.A_thole = emle_base._get_A_thole(
+                r_data, self.s, self.q_val, k, a_Thole
+            )
+        else:
+            self.s, self.q_core, self.q_val, self.A_thole = emle_base(
+                self.atomic_numbers,
+                self.qm_xyz,
+                self.q_total,
+            )
         self.atomic_alpha = 1. / _torch.diagonal(self.A_thole, dim1=1, dim2=2)[:, ::3]
         self.alpha = self._get_mol_alpha(self.A_thole, self.atomic_numbers)
 

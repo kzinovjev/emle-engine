@@ -36,14 +36,14 @@ parser.add_argument(
 parser.add_argument(
     "--backend",
     type=str,
-    choices=["torchani", "mace", "deepmd"],
+    choices=["torchani", "mace", "maceemle", "deepmd"],
     help="Gas phase ML backend",
 )
 parser.add_argument(
     "--deepmd-model",
     type=str,
     metavar="name.pb",
-    help="DeePMD model file(s) (for backend='deepmd')",
+    help="MACE model file (for 'mace' and 'maceemle' backends)",
 )
 parser.add_argument(
     "--mace-model",
@@ -109,6 +109,11 @@ elif args.backend == "mace":
     from emle.models import MACEEMLE
 
     backend = MACEEMLE(emle_model=args.emle_model, mace_model=args.mace_model)
+
+elif args.backend == "maceemle":
+    from emle.models import MACEEMLEJoint
+
+    backend = MACEEMLEJoint(emle_model=args.emle_model, mace_model=args.mace_model)
 
 elif args.backend == "maceemle":
     from emle.models import MACEEMLEJoint

@@ -31,7 +31,7 @@ import os as _os
 import torch as _torch
 import numpy as _np
 
-from typing import List
+from typing import List, Dict
 
 from ._emle import EMLE as _EMLE
 from ._emle import _has_nnpops
@@ -769,10 +769,12 @@ class MACEEMLEJoint(_torch.nn.Module):
         self._E_vac_qbc = _torch.empty(0, dtype=self._dtype)
         self._grads_qbc = _torch.empty(0, dtype=self._dtype)
 
-        self.emle_values = {'s': _torch.empty(0, dtype=self._dtype),
-                            'q_core': _torch.empty(0, dtype=self._dtype),
-                            'q': _torch.empty(0, dtype=self._dtype),
-                            'mu': _torch.empty(0, dtype=self._dtype)}
+        self.emle_values: Dict[str, List[Tensor]] = {
+            's': [_torch.empty(0, dtype=self._dtype)],
+            'q_core': [_torch.empty(0, dtype=self._dtype)],
+            'q': [_torch.empty(0, dtype=self._dtype)],
+            'mu': [_torch.empty(0, dtype=self._dtype)],
+        }
 
         # Create the z_table of the MACE model.
         self._z_table = [int(z.item()) for z in self._mace.atomic_numbers]
@@ -1033,6 +1035,8 @@ class MACEEMLEJoint(_torch.nn.Module):
         # Get the device.
         device = xyz_qm.device
 
+        self.reset_emle()
+
         # Batch the inputs if necessary.
         if atomic_numbers.ndim == 1:
             atomic_numbers = atomic_numbers.unsqueeze(0)
@@ -1116,7 +1120,10 @@ class MACEEMLEJoint(_torch.nn.Module):
             assert mu is not None
 
             # Store to be included in qm.xyz
-            self.emle_values.update({'s': s, 'q_core': q_core, 'q': q, 'mu': mu})
+            self.emle_values['s'].append(s)
+            self.emle_values['q_core'].append(q_core)
+            self.emle_values['q'].append(q)
+            self.emle_values['mu'].append(mu)
 
             s = s.view(1, -1)
             q_core = q_core.view(1, -1)
@@ -1175,3 +1182,9 @@ class MACEEMLEJoint(_torch.nn.Module):
         return _torch.stack(
             [results_E_vac, results_E_emle_static, results_E_emle_induced]
         )
+
+    def reset_emle(self) -> None:
+        self.emle_values['s'] = []
+        self.emle_values['q_core'] = []
+        self.emle_values['q'] = []
+        self.emle_values['mu'] = []
