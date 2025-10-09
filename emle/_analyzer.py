@@ -151,7 +151,7 @@ class EMLEAnalyzer:
                 charges_mm = _torch.empty((len(qm_xyz), 0), dtype=dtype, device=device)
                 mm_xyz = _torch.empty((len(qm_xyz), 0, 3), dtype=dtype, device=device)
             self.e_backend = (
-                backend(atomic_numbers, charges_mm, qm_xyz, mm_xyz).T
+                backend(atomic_numbers, charges_mm, qm_xyz, mm_xyz, qm_charge=q_total).T
                 * _HARTREE_TO_KCAL_MOL
             )
 

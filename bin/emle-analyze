@@ -73,6 +73,7 @@ parser.add_argument(
 parser.add_argument(
     "--q-total",
     type=int,
+    default=0,
     help="Total charge of the QM region",
 )
 parser.add_argument(
@@ -118,7 +119,9 @@ elif args.backend == "mace":
 elif args.backend == "maceemle":
     from emle.models import MACEEMLEJoint
 
-    backend = MACEEMLEJoint(emle_model=args.emle_model, mace_model=args.mace_model)
+    backend = MACEEMLEJoint(emle_model=args.emle_model,
+                            mace_model=args.mace_model,
+                            qm_charge=args.q_total)
 
 elif args.backend == "maceemle":
     from emle.models import MACEEMLEJoint
