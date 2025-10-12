@@ -33,9 +33,7 @@ import numpy as _np
 import tarfile as _tarfile
 
 from ._utils import pad_to_max
-
-_HARTREE_TO_KCALMOL = 627.509
-_HARTREE_BOHR_TO_EV_A = 27.2114/0.529177
+from ._units import _HARTREE_TO_KCAL_MOL, _HARTREE_BOHR_TO_EV_A 
 
 class ORCAParser:
     """
@@ -168,13 +166,13 @@ class ORCAParser:
     def _get_E_from_out(self, f):
         E_prefix = b"FINAL SINGLE POINT ENERGY"
         E_line = next(line for line in f if line.startswith(E_prefix))
-        return float(E_line.split()[-1]) * _HARTREE_TO_KCALMOL
+        return float(E_line.split()[-1]) * _HARTREE_TO_KCAL_MOL
 
     def _get_E_static(self):
         vpot_all = self._get_vpot()
         pc_all = self._get_pc()
         result = _np.array([(vpot @ pc) for vpot, pc in zip(vpot_all, pc_all)])
-        return result * _HARTREE_TO_KCALMOL
+        return result * _HARTREE_TO_KCAL_MOL
 
     def _get_vpot(self):
         return [
