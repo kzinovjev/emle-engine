@@ -147,13 +147,14 @@ class EMLEAnalyzer:
             if isinstance(backend, _torch.nn.Module):
                 backend = backend.to(device).to(dtype)
                 atomic_numbers = _torch.tensor(atomic_numbers, device=device)
-                qm_xyz = _torch.tensor(qm_xyz, dtype=dtype, device=device)
+                qm_xyz = _torch.tensor(qm_xyz, dtype=dtype, device=device, requires_grad=True)
                 charges_mm = _torch.empty((len(qm_xyz), 0), dtype=dtype, device=device)
                 mm_xyz = _torch.empty((len(qm_xyz), 0, 3), dtype=dtype, device=device)
             self.e_backend = (
                 backend(atomic_numbers, charges_mm, qm_xyz, mm_xyz, qm_charge=q_total).T
                 * _HARTREE_TO_KCAL_MOL
             )
+            self.grad_backend = _torch.autograd.grad(self.e_backend.T[0].sum(), qm_xyz)[0]
 
         self.atomic_numbers = _torch.tensor(
             atomic_numbers, dtype=_torch.int, device=device
@@ -238,6 +239,7 @@ class EMLEAnalyzer:
             "e_static_mu",
             "e_induced",
             "e_static_mbis",
+            "grad_backend",
         ):
             if attr in self.__dict__:
                 setattr(self, attr, getattr(self, attr).detach().cpu().numpy())

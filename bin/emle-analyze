@@ -185,6 +185,7 @@ if orca_parser:
 
 if args.backend:
     result["E_vac_emle"] = analyzer.e_backend
+    result["grad_vac_emle"] = analyzer.grad_backend
 if args.alpha:
     result["alpha_qm"] = orca_parser.alpha
 
