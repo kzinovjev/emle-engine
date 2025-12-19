@@ -51,7 +51,7 @@ class EMLEAnalyzer:
         q_total=None,
         use_dipoles=False,
         start=None,
-        end=None
+        end=None,
     ):
         """
         Constructor.
