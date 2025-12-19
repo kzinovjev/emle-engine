@@ -1567,7 +1567,7 @@ class EMLECalculator:
                         f"{self._step:>10}{lam:22.12f}{E_tot:22.12f}{E_mm:22.12f}{E_emle:22.12f}\n"
                     )
                 else:
-                    f.write(f"{self._step:>10}{E_vac:22.12f}{E_tot:22.12self._backends[0].emle_valuesf}\n")
+                    f.write(f"{self._step:>10}{E_vac:22.12f}{E_tot:22.12f}\n")
 
         # Increment the step counter.
         if self._is_first_step:
