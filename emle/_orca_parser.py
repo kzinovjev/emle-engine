@@ -33,9 +33,7 @@ import numpy as _np
 import tarfile as _tarfile
 
 from ._utils import pad_to_max
-
-_HARTREE_TO_KCALMOL = 627.509
-
+from ._units import _HARTREE_TO_KCAL_MOL, _HARTREE_BOHR_TO_EV_A 
 
 class ORCAParser:
     """
@@ -132,6 +130,9 @@ class ORCAParser:
                 self.mbis = self._parse_horton()
                 self.z, self.xyz = self._get_z_xyz()
 
+                self.E_vac = self.get_E_vac()
+                self.forces = self.get_forces()
+
                 if decompose:
                     self.vac_E, self.pc_E = self._get_E()
                     self.E = self.pc_E - self.vac_E
@@ -165,13 +166,13 @@ class ORCAParser:
     def _get_E_from_out(self, f):
         E_prefix = b"FINAL SINGLE POINT ENERGY"
         E_line = next(line for line in f if line.startswith(E_prefix))
-        return float(E_line.split()[-1]) * _HARTREE_TO_KCALMOL
+        return float(E_line.split()[-1]) * _HARTREE_TO_KCAL_MOL
 
     def _get_E_static(self):
         vpot_all = self._get_vpot()
         pc_all = self._get_pc()
         result = _np.array([(vpot @ pc) for vpot, pc in zip(vpot_all, pc_all)])
-        return result * _HARTREE_TO_KCALMOL
+        return result * _HARTREE_TO_KCAL_MOL
 
     def _get_vpot(self):
         return [
@@ -251,3 +252,43 @@ class ORCAParser:
 
     def _get_file(self, name, suffix):
         return self._tar.extractfile(f"{name}.{suffix}")
+    
+    def get_E_vac(self):
+        E_tot = [
+            self._get_E_vac_from_out(self._get_file(name, "vac.orca"))
+            for name in self.names
+        ]
+        return _np.array(E_tot)
+
+    def _get_E_vac_from_out(self, f):
+        E_prefix = b"Total Energy       :"
+        E_line = [line for line in f if line.startswith(E_prefix)]
+        return float(E_line[0].split()[-2])
+
+
+    def get_forces(self):
+        forces = [
+            self._get_forces_from_out(self._get_file(name, "vac.orca"))
+            for name in self.names
+        ]
+        return forces
+
+
+    def _get_forces_from_out(self, f):
+        while next(f) != b"CARTESIAN GRADIENT\n":
+                pass
+        next(f)
+        next(f)
+        forces = []
+        try:
+            while True:
+                line_elements = next(f).split()
+                if len(line_elements) == 0:
+                    break
+                # Extract gradient (last 3 elements) and convert to forces in eV/A
+                force_values = [float(f) * _HARTREE_BOHR_TO_EV_A * (-1) for f in line_elements[-3:]]
+                forces.append(force_values)
+
+        except ValueError:
+            pass
+        return _np.asarray(forces) 

@@ -1490,9 +1490,7 @@ class EMLECalculator:
         # Reset the first step flag.
         self._is_first_step = not self._restart
 
-    def _sire_callback(
-        self, atomic_numbers, charges_mm, xyz_qm, xyz_mm, cell=None, idx_mm=None
-    ):
+    def _sire_callback(self, atomic_numbers, charges_mm, xyz_qm, xyz_mm, cell=None, idx_mm=None):
         """
         A callback function to be used with Sire.
 
