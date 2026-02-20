@@ -418,6 +418,7 @@ class EMLE(_torch.nn.Module):
         charges_mm: Tensor,
         xyz_qm: Tensor,
         xyz_mm: Tensor,
+        cell: Optional[Tensor] = None,
         qm_charge: Union[int, Tensor] = 0,
         external_params: Optional[Dict[str, Tensor]] = None,
     ) -> Tensor:
@@ -438,6 +439,9 @@ class EMLE(_torch.nn.Module):
 
         xyz_mm: torch.Tensor (N_MM_ATOMS, 3) or (BATCH, N_MM_ATOMS, 3)
             Positions of MM atoms in Angstrom.
+
+        cell: torch.Tensor (3, 3) or (BATCH, 3, 3), optional
+            The simulation cell vectors in Angstrom.
 
         qm_charge: int or torch.Tensor (BATCH,)
             The charge on the QM region.
@@ -462,6 +466,14 @@ class EMLE(_torch.nn.Module):
             self._xyz_mm = self._xyz_mm.unsqueeze(0)
 
         batch_size = self._atomic_numbers.shape[0]
+
+        # Ensure cell is a tensor and repeat for batch size if necessary.
+        if cell is not None:
+            if isinstance(cell, _torch.Tensor):
+                if cell.ndim == 2:
+                    cell = cell.repeat(batch_size, 1, 1).to(self._device)
+            else:
+                raise TypeError("'cell' must be of type 'torch.Tensor'")
 
         # Ensure qm_charge is a tensor and repeat for batch size if necessary
         if isinstance(qm_charge, int):
