@@ -1037,6 +1037,7 @@ class MACEEMLEJoint(_torch.nn.Module):
             charges_mm: Tensor,
             xyz_qm: Tensor,
             xyz_mm: Tensor,
+            cell: Optional[Tensor] = None,
             qm_charge: int = 0,
     ) -> Tensor:
         """
@@ -1056,6 +1057,9 @@ class MACEEMLEJoint(_torch.nn.Module):
 
         xyz_mm: torch.Tensor (N_MM_ATOMS, 3) or (BATCH, N_MM_ATOMS, 3)
             Positions of MM atoms in Angstrom.
+
+        cell: torch.Tensor (3, 3) or (BATCH, 3, 3), optional
+            The simulation cell vectors in Angstrom.
 
         qm_charge: int
             The charge on the QM region.
@@ -1077,6 +1081,8 @@ class MACEEMLEJoint(_torch.nn.Module):
             xyz_qm = xyz_qm.unsqueeze(0)
             xyz_mm = xyz_mm.unsqueeze(0)
             charges_mm = charges_mm.unsqueeze(0)
+            if cell is not None and cell.ndim == 2:
+                cell = cell.unsqueeze(0)
 
         # Store the number of batches.
         num_batches = atomic_numbers.shape[0]
@@ -1103,6 +1109,10 @@ class MACEEMLEJoint(_torch.nn.Module):
             edge_index, shifts = self._get_neighbor_pairs(
                 xyz_qm[i], None, self._r_max, self._dtype, device
             )
+
+            # Get the cell for this configuration.
+            if cell is not None:
+                cell = cell[i].to(self._dtype).to(device)
 
             if not _torch.equal(atomic_numbers[i], self._atomic_numbers):
                 # Update the node attributes if the atomic numbers have changed.
@@ -1134,7 +1144,7 @@ class MACEEMLEJoint(_torch.nn.Module):
                 "positions": positions,
                 "edge_index": edge_index,
                 "shifts": shifts,
-                "cell": self._cell,
+                "cell": self._cell if cell is None else cell,
                 "total_charge": _torch.tensor(qm_charge, dtype=self._dtype).to(device)
             }
 
@@ -1207,7 +1217,8 @@ class MACEEMLEJoint(_torch.nn.Module):
                     external_params['mu'] = mu
                 # Get the EMLE energy components.
                 E_emle = self._emle(
-                    atomic_numbers, charges_mm, xyz_qm, xyz_mm, qm_charge, external_params
+                    atomic_numbers, charges_mm, xyz_qm, xyz_mm, cell, qm_charge,
+                    external_params
                 )
                 results_E_emle_static[i] = E_emle[0][0]
                 results_E_emle_induced[i] = E_emle[1][0]
