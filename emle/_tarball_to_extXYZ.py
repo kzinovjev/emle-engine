@@ -15,6 +15,34 @@ from ._orca_parser import ORCAParser
 from ._units import _HARTREE_BOHR_TO_EV_A
 
 
+def _traceless_quadrupoles(theta):
+    """
+    Convert HORTON traced Cartesian quadrupoles to the traceless convention
+    used by the EMLE-MACE models.
+
+    Parameters
+    ----------
+
+    theta: numpy.ndarray (N_ATOMS, 6)
+        Traced Cartesian quadrupoles, order [xx, xy, xz, yy, yz, zz].
+
+    Returns
+    -------
+
+    result: numpy.ndarray (N_ATOMS, 6)
+        Traceless quadrupoles in the same [xx, xy, xz, yy, yz, zz] order.
+    """
+    theta = np.array(theta, dtype=float)
+    if theta.ndim != 2 or theta.shape[1] != 6:
+        raise ValueError(
+            "Expected quadrupoles of shape (N_ATOMS, 6) in order "
+            f"[xx, xy, xz, yy, yz, zz], got shape {theta.shape}"
+        )
+    diag = [0, 3, 5]  # xx, yy, zz
+    theta[:, diag] -= theta[:, diag].sum(axis=1, keepdims=True) / 3.0
+    return theta
+
+
 def orca_to_extxyz(
     orca_tarball_path,
     output_path=None,
@@ -120,6 +148,11 @@ def orca_to_extxyz(
         if not ("mu" in parser.mbis and len(parser.mbis["mu"]) > i):
             raise ValueError(f"Dipole moments not available for frame {frame_number}")
         atoms.arrays["mu"] = parser.mbis["mu"][i]
+
+        # Static atomic quadrupoles (theta), stored traceless (HORTON's are traced).
+        if not ("theta" in parser.mbis and len(parser.mbis["theta"]) > i):
+            raise ValueError(f"Quadrupoles not available for frame {frame_number}")
+        atoms.arrays["theta"] = _traceless_quadrupoles(parser.mbis["theta"][i])
 
         # Valence width (s)
         if not ("s" in parser.mbis and len(parser.mbis["s"]) > i):
