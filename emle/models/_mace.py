@@ -738,6 +738,7 @@ class MACEEMLEJoint(_torch.nn.Module):
         mace_model=None,
         atomic_numbers=None,
         use_dipoles=False,
+        use_quadrupoles=False,
         device=None,
         dtype=None,
     ):
@@ -788,6 +789,13 @@ class MACEEMLEJoint(_torch.nn.Module):
             static electrostatic energy. When True, 'mu' is passed to EMLE as
             part of the external parameters. The calculator only permits this
             flag with the 'emle-mace' backend.
+
+        use_quadrupoles: bool
+            Whether to additionally include the MACE-predicted atomic
+            quadrupoles 'theta' in the static electrostatic energy. Requires
+            use_dipoles=True (the three supported levels are charges,
+            charges+dipoles and charges+dipoles+quadrupoles). The calculator
+            only permits this flag with the 'emle-mace' backend.
 
         device: torch.device
             The device on which to run the model.
@@ -939,6 +947,7 @@ class MACEEMLEJoint(_torch.nn.Module):
         #   'q'      - total charges (= q_core + q_val); kept for parity with
         #              the training-data extXYZ produced by tarball-to-extxyz
         #   'mu'     - static atomic dipoles (3-vectors)
+        #   'theta'  - static atomic quadrupoles (3x3 symmetric traceless)
         # Cleared by reset_emle() at the start of each forward() call, then
         # one tensor is appended per batch element inside forward().
         self.emle_values: Dict[str, List[Tensor]] = {
@@ -947,6 +956,7 @@ class MACEEMLEJoint(_torch.nn.Module):
             "q_val": [_torch.empty(0, dtype=self._dtype)],
             "q": [_torch.empty(0, dtype=self._dtype)],
             "mu": [_torch.empty(0, dtype=self._dtype)],
+            "theta": [_torch.empty(0, dtype=self._dtype)],
         }
 
         # Create the z_table of the MACE model.
@@ -993,7 +1003,14 @@ class MACEEMLEJoint(_torch.nn.Module):
         # Set the _get_neighbor_pairs method on the instance.
         self._get_neighbor_pairs = _get_neighbor_pairs
 
+        if use_quadrupoles and not use_dipoles:
+            raise ValueError(
+                "use_quadrupoles=True requires use_dipoles=True "
+                "(supported levels: charges, charges+dipoles, "
+                "charges+dipoles+quadrupoles)"
+            )
         self.use_dipoles = use_dipoles
+        self.use_quadrupoles = use_quadrupoles
 
     @staticmethod
     def _load_mace_model(mace_model: str, device: _torch.device):
@@ -1310,11 +1327,13 @@ class MACEEMLEJoint(_torch.nn.Module):
             q_core = output["core_charges"]
             q = output["charges"]
             mu = output["atomic_dipoles"]
+            theta = output["atomic_quadrupoles"]
 
             assert s is not None
             assert q_core is not None
             assert q is not None
             assert mu is not None
+            assert theta is not None
 
             q_val = q - q_core
 
@@ -1327,11 +1346,13 @@ class MACEEMLEJoint(_torch.nn.Module):
             self.emle_values["q_val"].append(q_val)
             self.emle_values["q"].append(q)
             self.emle_values["mu"].append(mu)
+            self.emle_values["theta"].append(theta)
 
             s = s.view(1, -1)
             q_core = q_core.view(1, -1)
             q_val = q_val.view(1, -1)
             mu = mu.view(1, -1, 3) if self.use_dipoles else None
+            theta = theta.view(1, -1, 3, 3) if self.use_quadrupoles else None
 
             assert (
                 E_vac is not None
@@ -1402,6 +1423,8 @@ class MACEEMLEJoint(_torch.nn.Module):
                 }
                 if mu is not None:
                     external_params["mu"] = mu
+                if theta is not None:
+                    external_params["theta"] = theta
                 # Get the EMLE energy components. Pass only batch element i so
                 # that external_params (batch=1) and the coordinate tensors are
                 # consistent inside EMLE's forward.
@@ -1436,3 +1459,4 @@ class MACEEMLEJoint(_torch.nn.Module):
         self.emle_values["q_val"] = []
         self.emle_values["q"] = []
         self.emle_values["mu"] = []
+        self.emle_values["theta"] = []

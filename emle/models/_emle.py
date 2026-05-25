@@ -455,6 +455,9 @@ class EMLE(_torch.nn.Module):
                 'mu': Optional[torch.Tensor] (1, N_QM_ATOMS, 3)
                     Static atomic dipoles (optional; included in the static
                     energy when present).
+                'theta': Optional[torch.Tensor] (1, N_QM_ATOMS, 3, 3)
+                    Static atomic quadrupoles (optional; symmetric traceless
+                    Cartesian, included in the static energy when present).
 
             When None, 's', 'q_core', 'q_val', and the Thole tensor are
             predicted by EMLEBase (original behaviour).
@@ -516,6 +519,7 @@ class EMLE(_torch.nn.Module):
             q_core = external_params["q_core"]
             q_val = external_params["q_val"]
             mu = external_params.get("mu")
+            theta = external_params.get("theta")
 
             xyz_qm_bohr = self._xyz_qm * ANGSTROM_TO_BOHR
             mask = atomic_numbers > 0
@@ -534,6 +538,7 @@ class EMLE(_torch.nn.Module):
                 qm_charge,
             )
             mu = None
+            theta = None
 
         # Convert coordinates to Bohr.
         xyz_qm_bohr = self._xyz_qm * ANGSTROM_TO_BOHR
@@ -555,7 +560,7 @@ class EMLE(_torch.nn.Module):
                 q_core, dtype=self._charges_mm.dtype, device=self._device
             )
         E_static = self._emle_base.get_static_energy(
-            q_core, q_val, self._charges_mm, mesh_data, mu
+            q_core, q_val, self._charges_mm, mesh_data, mu, theta
         )
 
         # Compute the induced energy.

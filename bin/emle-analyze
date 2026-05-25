@@ -82,6 +82,12 @@ parser.add_argument(
     help="Whether to include static atomic dipoles",
 )
 parser.add_argument(
+    "--use-quadrupoles",
+    action="store_true",
+    help="Whether to additionally include static atomic quadrupoles "
+    "(requires --use-dipoles and the emle-mace backend)",
+)
+parser.add_argument(
     "--start",
     type=int,
     help="Structure index to start parsing",
@@ -105,6 +111,11 @@ if args.backend == "deepmd" and not args.deepmd_model:
     parser.error("--deepmd-model is required when backend='deepmd'")
 if args.backend in ("mace", "emle-mace") and not args.mace_model:
     parser.error("--mace-model is required when backend is 'mace' or 'emle-mace'")
+if args.use_quadrupoles:
+    if not args.use_dipoles:
+        parser.error("--use-quadrupoles requires --use-dipoles")
+    if args.backend != "emle-mace":
+        parser.error("--use-quadrupoles is only supported with the emle-mace backend")
 
 backend = None
 if args.backend == "torchani":
@@ -123,6 +134,8 @@ elif args.backend == "emle-mace":
         emle_model=args.emle_model,
         mace_model=args.mace_model,
         qm_charge=args.q_total,
+        use_dipoles=args.use_dipoles,
+        use_quadrupoles=args.use_quadrupoles,
     )
 
 elif args.backend == "deepmd":
@@ -144,6 +157,7 @@ analyzer = EMLEAnalyzer(
     orca_parser,
     args.q_total,
     args.use_dipoles,
+    use_quadrupoles=args.use_quadrupoles,
     start=args.start,
     end=args.end,
 )
@@ -162,6 +176,9 @@ result = {
 if args.use_dipoles:
     result["mu_emle"] = analyzer.mu
     result["E_static_mu_emle"] = analyzer.e_static_mu
+if args.use_quadrupoles:
+    result["theta_emle"] = analyzer.theta
+    result["E_static_theta_emle"] = analyzer.e_static_theta
 
 if orca_parser:
     result.update(
@@ -179,6 +196,12 @@ if orca_parser:
     )
     if args.use_dipoles:
         result["mu_qm"] = orca_parser.mbis["mu"]
+        if "e_static_mbis_mu" in analyzer.__dict__:
+            result["E_static_mbis_mu"] = analyzer.e_static_mbis_mu
+    if args.use_quadrupoles:
+        result["theta_qm"] = orca_parser.mbis["theta"]
+        if "e_static_mbis_theta" in analyzer.__dict__:
+            result["E_static_mbis_theta"] = analyzer.e_static_mbis_theta
 
 if args.backend:
     result["E_vac_emle"] = analyzer.e_backend
