@@ -50,6 +50,7 @@ class EMLEAnalyzer:
         parser=None,
         q_total=None,
         use_dipoles=False,
+        use_quadrupoles=False,
         start=None,
         end=None,
     ):
@@ -76,6 +77,15 @@ class EMLEAnalyzer:
 
         q_total: int, float
             The total charge of the QM region.
+
+        use_dipoles: bool
+            Whether to also report dipole-inclusive static energy (E_static_mu)
+            and predicted dipoles. Only meaningful with the MACEEMLEJoint backend.
+
+        use_quadrupoles: bool
+            Whether to also report quadrupole-inclusive static energy
+            (E_static_theta) and predicted quadrupoles. Requires use_dipoles=True
+            and the MACEEMLEJoint backend.
 
         start: int
             Structure index to start parsing
@@ -184,6 +194,8 @@ class EMLEAnalyzer:
             self.q_core = _torch.stack(backend.emle_values["q_core"])
             self.q_val = _torch.stack(backend.emle_values["q_val"])
             self.mu = _torch.stack(backend.emle_values["mu"])
+            if use_quadrupoles:
+                self.theta = _torch.stack(backend.emle_values["theta"])
 
             a_Thole = backend._mace.a_Thole
             species_id = emle_base._species_map[self.atomic_numbers]
@@ -222,6 +234,18 @@ class EMLEAnalyzer:
                 )
                 * _HARTREE_TO_KCAL_MOL
             )
+        if use_quadrupoles:
+            self.e_static_theta = (
+                emle_base.get_static_energy(
+                    self.q_core,
+                    self.q_val,
+                    self.pc_charges,
+                    mesh_data,
+                    self.mu,
+                    self.theta,
+                )
+                * _HARTREE_TO_KCAL_MOL
+            )
         self.e_induced = (
             emle_base.get_induced_energy(
                 self.A_thole, self.pc_charges, self.s, mesh_data, mask
@@ -234,15 +258,45 @@ class EMLEAnalyzer:
         self.mu_induced = _torch.sum(mu_ind, dim=1)
 
         if parser:
+            mbis_q_core = _torch.tensor(
+                parser.mbis["q_core"], dtype=dtype, device=device
+            )
+            mbis_q_val = _torch.tensor(
+                parser.mbis["q_val"], dtype=dtype, device=device
+            )
             self.e_static_mbis = (
                 emle_base.get_static_energy(
-                    _torch.tensor(parser.mbis["q_core"], dtype=dtype, device=device),
-                    _torch.tensor(parser.mbis["q_val"], dtype=dtype, device=device),
-                    self.pc_charges,
-                    mesh_data,
+                    mbis_q_core, mbis_q_val, self.pc_charges, mesh_data
                 )
                 * _HARTREE_TO_KCAL_MOL
             )
+            # Reference (MBIS) static energy with dipoles/quadrupoles, mirroring
+            # the predicted e_static_mu / e_static_theta.
+            if use_dipoles and "mu" in parser.mbis:
+                mbis_mu = _torch.tensor(
+                    parser.mbis["mu"], dtype=dtype, device=device
+                )
+                self.e_static_mbis_mu = (
+                    emle_base.get_static_energy(
+                        mbis_q_core, mbis_q_val, self.pc_charges, mesh_data, mbis_mu
+                    )
+                    * _HARTREE_TO_KCAL_MOL
+                )
+                if use_quadrupoles and "theta" in parser.mbis:
+                    mbis_theta = self._theta6_to_3x3(
+                        _torch.tensor(parser.mbis["theta"], dtype=dtype, device=device)
+                    )
+                    self.e_static_mbis_theta = (
+                        emle_base.get_static_energy(
+                            mbis_q_core,
+                            mbis_q_val,
+                            self.pc_charges,
+                            mesh_data,
+                            mbis_mu,
+                            mbis_theta,
+                        )
+                        * _HARTREE_TO_KCAL_MOL
+                    )
 
         for attr in (
             "atomic_numbers",
@@ -252,6 +306,7 @@ class EMLEAnalyzer:
             "q_val",
             "q",
             "mu",
+            "theta",
             "q_total",
             "atomic_alpha",
             "alpha",
@@ -260,12 +315,41 @@ class EMLEAnalyzer:
             "e_backend",
             "e_static",
             "e_static_mu",
+            "e_static_theta",
             "e_induced",
             "e_static_mbis",
+            "e_static_mbis_mu",
+            "e_static_mbis_theta",
             "grad_backend",
         ):
             if attr in self.__dict__:
                 setattr(self, attr, getattr(self, attr).detach().cpu().numpy())
+
+    @staticmethod
+    def _theta6_to_3x3(theta6):
+        """
+        Expand the 6 upper-triangle quadrupole components [xx, xy, xz, yy, yz, zz]
+        (HORTON/MBIS Cartesian order) into a symmetric (..., 3, 3) tensor.
+
+        Parameters
+        ----------
+
+        theta6: torch.Tensor (..., 6)
+            Quadrupole components in [xx, xy, xz, yy, yz, zz] order.
+
+        Returns
+        -------
+
+        result: torch.Tensor (..., 3, 3)
+            Symmetric quadrupole tensors.
+        """
+        tri = _torch.triu_indices(3, 3, offset=0)
+        out = _torch.zeros(
+            theta6.shape[:-1] + (3, 3), dtype=theta6.dtype, device=theta6.device
+        )
+        out[..., tri[0], tri[1]] = theta6
+        out[..., tri[1], tri[0]] = theta6
+        return out
 
     @staticmethod
     def _parse_qm_xyz(filename):

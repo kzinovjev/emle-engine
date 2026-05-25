@@ -827,8 +827,9 @@ class EMLEBase(_torch.nn.Module):
         q_core: Tensor,
         q_val: Tensor,
         charges_mm: Tensor,
-        mesh_data: Tuple[Tensor, Tensor, Tensor],
+        mesh_data: Tuple[Tensor, Tensor, Tensor, Tensor],
         mu: Optional[Tensor] = None,
+        theta: Optional[Tensor] = None,
     ) -> Tensor:
         """
         Calculate the static electrostatic energy.
@@ -851,6 +852,9 @@ class EMLEBase(_torch.nn.Module):
         mu: Optional[torch.Tensor] (N_BATCH, N_QM_ATOMS, 3)
             QM static atomic dipoles.
 
+        theta: Optional[torch.Tensor] (N_BATCH, N_QM_ATOMS, 3, 3)
+            QM static atomic quadrupoles (symmetric traceless Cartesian).
+
         Returns
         -------
 
@@ -863,7 +867,10 @@ class EMLEBase(_torch.nn.Module):
         vpot_static = vpot_q_core + vpot_q_val
         if mu is not None:
             vpot_mu = EMLEBase._get_vpot_mu(mu, mesh_data[2])
-            vpot_static += vpot_mu
+            vpot_static = vpot_static + vpot_mu
+        if theta is not None:
+            vpot_theta = EMLEBase._get_vpot_theta(theta, mesh_data[3])
+            vpot_static = vpot_static + vpot_theta
         return _torch.sum(vpot_static * charges_mm, dim=1)
 
     @staticmethod
@@ -871,7 +878,7 @@ class EMLEBase(_torch.nn.Module):
         A_thole: Tensor,
         charges_mm: Tensor,
         s: Tensor,
-        mesh_data: Tuple[Tensor, Tensor, Tensor],
+        mesh_data: Tuple[Tensor, Tensor, Tensor, Tensor],
         mask: Tensor,
     ) -> Tensor:
         """
@@ -908,7 +915,7 @@ class EMLEBase(_torch.nn.Module):
     @staticmethod
     def _get_mu_ind(
         A: Tensor,
-        mesh_data: Tuple[Tensor, Tensor, Tensor],
+        mesh_data: Tuple[Tensor, Tensor, Tensor, Tensor],
         q: Tensor,
         s: Tensor,
         mask: Tensor,
@@ -999,9 +1006,37 @@ class EMLEBase(_torch.nn.Module):
         return -_torch.einsum("ijkl,ijl->ik", T1, mu)
 
     @staticmethod
+    def _get_vpot_theta(theta: Tensor, T2: Tensor) -> Tensor:
+        """
+        Internal method to calculate the electrostatic potential generated
+        by atomic quadrupoles.
+
+        The potential at an MM site from a traceless Cartesian quadrupole theta
+        at displacement rr is theta_ab rr_a rr_b / r^5, i.e. theta contracted with
+        T2 = (rr ⊗ rr) / r^5. The -r^2 delta_ab term is omitted from T2 since it
+        vanishes against a traceless theta.
+
+        Parameters
+        ----------
+
+        theta: torch.Tensor (N_BATCH, MAX_QM_ATOMS, 3, 3)
+            Atomic quadrupoles (symmetric, traceless).
+
+        T2: torch.Tensor (N_BATCH, MAX_QM_ATOMS, MAX_MM_ATOMS, 3, 3)
+            T2 tensor for QM atoms over MM atom positions.
+
+        Returns
+        -------
+
+        result: torch.Tensor (N_BATCH, MAX_MM_ATOMS)
+            Electrostatic potential over MM atoms.
+        """
+        return _torch.einsum("ijab,ijkab->ik", theta, T2)
+
+    @staticmethod
     def _get_mesh_data(
         xyz: Tensor, xyz_mesh: Tensor, s: Tensor, mask: Tensor
-    ) -> Tuple[Tensor, Tensor, Tensor]:
+    ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
         """
         Internal method, calculates mesh_data object.
 
@@ -1023,8 +1058,8 @@ class EMLEBase(_torch.nn.Module):
         Returns
         -------
 
-        result: Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-            Tuple of mesh data objects.
+        result: Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+            Tuple of mesh data objects (r_inv, T0_slater, T1, T2).
         """
         rr = xyz_mesh[:, None, :, :] - xyz[:, :, None, :]
         r = (rr * rr).sum(-1).sqrt()
@@ -1034,10 +1069,17 @@ class EMLEBase(_torch.nn.Module):
         r_inv = _torch.where(mask, 1.0 / (r + 1e-10), 0.0)
         T0_slater = _torch.where(mask, EMLEBase._get_T0_slater(r, s[:, :, None]), 0.0)
 
+        # T1 (charge-dipole) and T2 (charge-quadrupole) bare point-multipole
+        # tensors. r_inv is already zero on padded atoms, so T1/T2 vanish there.
+        T1 = -rr * r_inv[..., None] ** 3
+        r_inv5 = (r_inv ** 5).unsqueeze(-1).unsqueeze(-1)
+        T2 = rr.unsqueeze(-1) * rr.unsqueeze(-2) * r_inv5
+
         return (
             r_inv,
             T0_slater,
-            -rr * r_inv[..., None] ** 3,
+            T1,
+            T2,
         )
 
     @staticmethod

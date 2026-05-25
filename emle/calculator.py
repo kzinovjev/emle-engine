@@ -81,6 +81,7 @@ class EMLECalculator:
         method="electrostatic",
         alpha_mode="fixed",
         use_dipoles=False,
+        use_quadrupoles=False,
         atomic_numbers=None,
         qm_charge=0,
         backend="torchani",
@@ -157,6 +158,12 @@ class EMLECalculator:
 
         use_dipoles: bool
             Whether static atomic dipoles should be used
+
+        use_quadrupoles: bool
+            Whether static atomic quadrupoles should additionally be used. This
+            requires use_dipoles=True and is only supported with the 'emle-mace'
+            backend. The three supported levels are therefore: charges only,
+            charges+dipoles, and charges+dipoles+quadrupoles.
 
         atomic_numbers: List[int], Tuple[int], numpy.ndarray
             Atomic numbers for the QM region. This allows use of optimised AEV
@@ -518,7 +525,19 @@ class EMLECalculator:
                     _logger.error(msg)
                     raise ValueError(msg)
 
+        if use_quadrupoles:
+            if not use_dipoles:
+                msg = "use_quadrupoles=True requires use_dipoles=True"
+                _logger.error(msg)
+                raise ValueError(msg)
+            for backend in formatted_backends:
+                if backend != "emle-mace":
+                    msg = "Static quadrupoles can only be used with emle-mace backend"
+                    _logger.error(msg)
+                    raise ValueError(msg)
+
         self._use_dipoles = use_dipoles
+        self._use_quadrupoles = use_quadrupoles
 
         # Validate the external backend.
         if external_backend is not None:
@@ -680,6 +699,7 @@ class EMLECalculator:
                             emle_model=model,
                             emle_method=method,
                             use_dipoles=self._use_dipoles,
+                            use_quadrupoles=self._use_quadrupoles,
                             mm_charges=self._mm_charges,
                             qm_charge=self._qm_charge,
                             mace_model=mace_model,

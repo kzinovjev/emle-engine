@@ -249,6 +249,8 @@ class ORCAParser:
             "q_core": data["core_charges"],
             "q_val": data["valence_charges"] + q_shift,
             "mu": data["cartesian_multipoles"][:, 1:4],
+            # HORTON Cartesian quadrupole, order [xx, xy, xz, yy, yz, zz].
+            "theta": data["cartesian_multipoles"][:, 4:10],
         }
 
     def _get_file(self, name, suffix):
