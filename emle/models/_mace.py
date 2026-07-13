@@ -36,6 +36,7 @@ from typing import List, Dict, Optional
 from ._emle import EMLE as _EMLE
 from ._utils import _get_neighbor_pairs
 from ._utils import _has_neighbor_pairs
+from ._utils import _sanitize_alpha_mode
 
 from torch import Tensor
 
@@ -741,6 +742,7 @@ class MACEEMLEJoint(_torch.nn.Module):
         atomic_numbers=None,
         use_dipoles=False,
         use_quadrupoles=False,
+        alpha_mode="fixed",
         device=None,
         dtype=None,
     ):
@@ -798,6 +800,17 @@ class MACEEMLEJoint(_torch.nn.Module):
             use_dipoles=True (the three supported levels are charges,
             charges+dipoles and charges+dipoles+quadrupoles). The calculator
             only permits this flag with the 'emle-mace' backend.
+
+        alpha_mode: str
+            How atomic polarizabilities are calculated.
+                "fixed":
+                    atomic polarizabilities are proportional to the MBIS
+                    volumes (per-element ratio k_Z only).
+                "flexible":
+                    the per-element ratio k_Z is additionally multiplied by
+                    the MACE-predicted per-atom correction 'k_alpha', making
+                    the atomic polarizabilities environment dependent.
+                    Requires a MACE model trained with the k_alpha head.
 
         device: torch.device
             The device on which to run the model.
@@ -857,8 +870,9 @@ class MACEEMLEJoint(_torch.nn.Module):
             )
 
         # Create an instance of the EMLE model.
-        # alpha_mode is hard-coded to "fixed" here: MACEEMLEJoint currently only
-        # supports the fixed mode.
+        # The base's own alpha machinery is bypassed for this backend: a_Thole,
+        # k_Z and (in flexible mode) k_alpha are all supplied by the MACE model
+        # via external_params, so the base is always constructed in fixed mode.
         self._emle = _EMLE(
             model=emle_model,
             method=emle_method,
@@ -1014,6 +1028,7 @@ class MACEEMLEJoint(_torch.nn.Module):
             )
         self.use_dipoles = use_dipoles
         self.use_quadrupoles = use_quadrupoles
+        self._flexible_alpha = _sanitize_alpha_mode(alpha_mode) == "flexible"
 
     @staticmethod
     def _load_mace_model(mace_model: str, device: _torch.device):
@@ -1357,6 +1372,15 @@ class MACEEMLEJoint(_torch.nn.Module):
             mu = mu.view(1, -1, 3) if self.use_dipoles else None
             theta = theta.view(1, -1, 3, 3) if self.use_quadrupoles else None
 
+            # Per-atom flexible polarizability correction (optional).
+            k_alpha: Optional[Tensor] = None
+            if self._flexible_alpha:
+                k_alpha_out = output["k_alpha"]
+                assert (
+                    k_alpha_out is not None
+                ), "alpha_mode='flexible' but the MACE model did not return 'k_alpha'."
+                k_alpha = k_alpha_out.view(1, -1)
+
             assert (
                 E_vac is not None
             ), "The model did not return any energy. Please check the input."
@@ -1428,6 +1452,8 @@ class MACEEMLEJoint(_torch.nn.Module):
                     external_params["mu"] = mu
                 if theta is not None:
                     external_params["theta"] = theta
+                if k_alpha is not None:
+                    external_params["k_alpha"] = k_alpha
                 # Get the EMLE energy components. Pass only batch element i so
                 # that external_params (batch=1) and the coordinate tensors are
                 # consistent inside EMLE's forward.

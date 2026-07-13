@@ -452,6 +452,10 @@ class EMLE(_torch.nn.Module):
                 'theta': Optional[torch.Tensor] (1, N_QM_ATOMS, 3, 3)
                     Static atomic quadrupoles (optional; symmetric traceless
                     Cartesian, included in the static energy when present).
+                'k_alpha': Optional[torch.Tensor] (1, N_QM_ATOMS)
+                    Per-atom polarizability correction (optional; multiplies the
+                    per-species 'k_Z' ratio in the induced/Thole energy when
+                    present, enabling environment-dependent polarizability).
 
             When None, 's', 'q_core', 'q_val', and the Thole tensor are
             predicted by EMLEBase (original behaviour).
@@ -520,6 +524,13 @@ class EMLE(_torch.nn.Module):
 
             species_id = self._emle_base._species_map[atomic_numbers]
             k = external_params["k_Z"][species_id]
+
+            # Flexible polarizability: multiply the per-element ratio by the
+            # per-atom, environment-dependent correction when supplied. Absent
+            # -> unchanged fixed-alpha behaviour (same optional-key pattern as mu).
+            k_alpha = external_params.get("k_alpha")
+            if k_alpha is not None:
+                k = k * k_alpha
 
             r_data = self._emle_base._get_r_data(xyz_qm_bohr, mask)
             A_thole = self._emle_base._get_A_thole(
