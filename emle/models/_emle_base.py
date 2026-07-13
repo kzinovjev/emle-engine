@@ -1011,10 +1011,11 @@ class EMLEBase(_torch.nn.Module):
         Internal method to calculate the electrostatic potential generated
         by atomic quadrupoles.
 
-        The potential at an MM site from a traceless Cartesian quadrupole theta
-        at displacement rr is theta_ab rr_a rr_b / r^5, i.e. theta contracted with
-        T2 = (rr ⊗ rr) / r^5. The -r^2 delta_ab term is omitted from T2 since it
-        vanishes against a traceless theta.
+        The potential at an MM site from a Cartesian quadrupole theta at
+        displacement rr is theta_ab (3 rr_a rr_b - r^2 delta_ab) / (2 r^5), i.e.
+        theta contracted with the full kernel T2 = (3 rr rr - r^2 I) / (2 r^5)
+        built in _get_mesh_data. Keeping the -r^2 I term makes this exact for
+        both traced (MBIS reference) and traceless (model-predicted) theta.
 
         Parameters
         ----------
@@ -1069,11 +1070,16 @@ class EMLEBase(_torch.nn.Module):
         r_inv = _torch.where(mask, 1.0 / (r + 1e-10), 0.0)
         T0_slater = _torch.where(mask, EMLEBase._get_T0_slater(r, s[:, :, None]), 0.0)
 
-        # T1 (charge-dipole) and T2 (charge-quadrupole) bare point-multipole
-        # tensors. r_inv is already zero on padded atoms, so T1/T2 vanish there.
+        # T1 (charge-dipole) and T2 (charge-quadrupole) point-multipole tensors.
+        # r_inv is already zero on padded atoms, so T1/T2 vanish there.
         T1 = -rr * r_inv[..., None] ** 3
+        # Full Cartesian charge-quadrupole kernel (3 rr rr - r^2 I) / (2 r^5).
+        # Keeping the -r^2 I term makes the operator exact for both traced
+        # (MBIS reference) and traceless (model-predicted) quadrupoles.
         r_inv5 = (r_inv ** 5).unsqueeze(-1).unsqueeze(-1)
-        T2 = rr.unsqueeze(-1) * rr.unsqueeze(-2) * r_inv5
+        r2 = (r * r).unsqueeze(-1).unsqueeze(-1)
+        eye = _torch.eye(3, device=rr.device, dtype=rr.dtype)
+        T2 = 0.5 * (3.0 * rr.unsqueeze(-1) * rr.unsqueeze(-2) - r2 * eye) * r_inv5
 
         return (
             r_inv,
