@@ -42,6 +42,7 @@ import ase.io as _ase_io
 import torch as _torch
 
 from .models import EMLE as _EMLE
+from .models._utils import _sanitize_alpha_mode
 
 from emle._units import (
     _NANOMETER_TO_BOHR,
@@ -153,8 +154,12 @@ class EMLECalculator:
                 "fixed":
                     one volume scaling factor is used for each species
                 "flexible":
-                    scaling factors are obtained with GPR using the values learned
-                    for each reference environment
+                    the scaling factors are environment dependent. For GPR
+                    backends they are obtained with GPR using the values
+                    learned for each reference environment; for the
+                    'emle-mace' backend the per-species factor is multiplied
+                    by the MACE-predicted per-atom correction 'k_alpha'
+                    (requires a MACE model trained with the k_alpha head).
 
         use_dipoles: bool
             Whether static atomic dipoles should be used
@@ -470,11 +475,16 @@ class EMLECalculator:
                 raise TypeError(msg)
             self._qm_charge = qm_charge
 
-        # Create the EMLE model instance.
+        # Create the EMLE model instance. For the 'emle-mace' backend the
+        # base's alpha machinery is bypassed (a_Thole, k_Z and k_alpha come
+        # from the MACE model), so the internal EMLE always runs in fixed
+        # mode and alpha_mode is handled by MACEEMLEJoint instead.
+        _backend_list = backend if isinstance(backend, (tuple, list)) else [backend]
+        _has_emle_mace = "emle-mace" in [str(b).lower() for b in _backend_list]
         self._emle = _EMLE(
             model=model,
             method=method,
-            alpha_mode=alpha_mode,
+            alpha_mode="fixed" if _has_emle_mace else alpha_mode,
             atomic_numbers=atomic_numbers,
             mm_charges=self._mm_charges,
             qm_charge=self._qm_charge,
@@ -700,6 +710,7 @@ class EMLECalculator:
                             emle_method=method,
                             use_dipoles=self._use_dipoles,
                             use_quadrupoles=self._use_quadrupoles,
+                            alpha_mode=alpha_mode,
                             mm_charges=self._mm_charges,
                             qm_charge=self._qm_charge,
                             mace_model=mace_model,
@@ -991,7 +1002,11 @@ class EMLECalculator:
         # Get the settings from the internal EMLE model.
         self._model = self._emle._model
         self._method = self._emle._method
-        self._alpha_mode = self._emle._alpha_mode
+        self._alpha_mode = (
+            _sanitize_alpha_mode(alpha_mode)
+            if _has_emle_mace
+            else self._emle._alpha_mode
+        )
         self._atomic_numbers = self._emle._atomic_numbers
 
         if isinstance(atomic_numbers, _np.ndarray):
