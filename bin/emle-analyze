@@ -90,6 +90,7 @@ parser.add_argument(
     help="Whether to additionally include static atomic quadrupoles "
     "(requires --use-dipoles and the emle-mace backend)",
 )
+
 parser.add_argument(
     "--start",
     type=int,
@@ -139,6 +140,7 @@ elif args.backend == "emle-mace":
         qm_charge=args.q_total,
         use_dipoles=args.use_dipoles,
         use_quadrupoles=args.use_quadrupoles,
+        alpha_mode=args.alpha_mode,
     )
 
 elif args.backend == "deepmd":
@@ -146,7 +148,8 @@ elif args.backend == "deepmd":
 
     backend = DeePMD(args.deepmd_model)
 
-emle_base = EMLE(model=args.emle_model, alpha_mode=args.alpha_mode)._emle_base
+base_alpha_mode = "fixed" if args.backend == "emle-mace" else args.alpha_mode
+emle_base = EMLE(model=args.emle_model, alpha_mode=base_alpha_mode)._emle_base
 
 orca_parser = None
 if args.orca_tarball:

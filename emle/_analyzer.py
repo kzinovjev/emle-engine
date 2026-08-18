@@ -200,6 +200,13 @@ class EMLEAnalyzer:
             a_Thole = backend._mace.a_Thole
             species_id = emle_base._species_map[self.atomic_numbers]
             k = backend._mace.elements_alpha_v_ratios[species_id]
+            # Flexible-alpha models scale k_Z by a per-atom k_alpha in the
+            # production induced path (models/_emle.py). Reproduce that here,
+            # otherwise atomic_alpha/alpha are reference values that ignore the
+            # flexible head (and any cap applied to it).
+            _ka_list = backend.emle_values.get("k_alpha", [])
+            if len(_ka_list) > 0 and _ka_list[0].numel() > 0:
+                k = k * _torch.stack(_ka_list)
             r_data = emle_base._get_r_data(qm_xyz_bohr, atomic_numbers > 0)
             self.A_thole = emle_base._get_A_thole(
                 r_data, self.s, self.q_val, k, a_Thole

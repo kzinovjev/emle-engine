@@ -974,6 +974,7 @@ class MACEEMLEJoint(_torch.nn.Module):
             "q": [_torch.empty(0, dtype=self._dtype)],
             "mu": [_torch.empty(0, dtype=self._dtype)],
             "theta": [_torch.empty(0, dtype=self._dtype)],
+            "k_alpha": [_torch.empty(0, dtype=self._dtype)],
         }
 
         # Create the z_table of the MACE model.
@@ -1381,6 +1382,15 @@ class MACEEMLEJoint(_torch.nn.Module):
                 ), "alpha_mode='flexible' but the MACE model did not return 'k_alpha'."
                 k_alpha = k_alpha_out.view(1, -1)
 
+            # Expose k_alpha so emle-analyze can reproduce the PRODUCTION alpha.
+            # The induced path multiplies k_Z by k_alpha (see models/_emle.py);
+            # without this the analyzer reports a reference alpha that ignores
+            # the flexible head entirely.
+            if k_alpha is not None:
+                self.emle_values["k_alpha"].append(k_alpha.view(-1))
+            else:
+                self.emle_values["k_alpha"].append(_torch.ones_like(s.view(-1)))
+
             assert (
                 E_vac is not None
             ), "The model did not return any energy. Please check the input."
@@ -1489,3 +1499,4 @@ class MACEEMLEJoint(_torch.nn.Module):
         self.emle_values["q"] = []
         self.emle_values["mu"] = []
         self.emle_values["theta"] = []
+        self.emle_values["k_alpha"] = []
