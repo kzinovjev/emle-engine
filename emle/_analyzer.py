@@ -410,7 +410,6 @@ class EMLEAnalyzer:
                 try:
                     n = int(file.readline().strip())
                     frames.append(_np.loadtxt(file, max_rows=n))
-                    file.readline()
                 except ValueError:
                     break
         padded_frames = _pad_to_max(frames)
