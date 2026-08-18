@@ -49,8 +49,7 @@ class EMLEAnalyzer:
         backend=None,
         parser=None,
         q_total=None,
-        use_dipoles=False,
-        use_quadrupoles=False,
+        max_static_L=0,
         start=None,
         end=None,
     ):
@@ -78,14 +77,12 @@ class EMLEAnalyzer:
         q_total: int, float
             The total charge of the QM region.
 
-        use_dipoles: bool
-            Whether to also report dipole-inclusive static energy (E_static_mu)
-            and predicted dipoles. Only meaningful with the MACEEMLEJoint backend.
-
-        use_quadrupoles: bool
-            Whether to also report quadrupole-inclusive static energy
-            (E_static_theta) and predicted quadrupoles. Requires use_dipoles=True
-            and the MACEEMLEJoint backend.
+        max_static_L: int
+            Highest static multipole order to report: 0 = charges only,
+            1 = also the dipole-inclusive static energy (E_static_mu) and
+            predicted dipoles, 2 = also the quadrupole-inclusive static
+            energy (E_static_theta) and predicted quadrupoles. Orders above
+            0 are only meaningful with the MACEEMLEJoint backend.
 
         start: int
             Structure index to start parsing
@@ -193,8 +190,9 @@ class EMLEAnalyzer:
             self.s = _torch.stack(backend.emle_values["s"])
             self.q_core = _torch.stack(backend.emle_values["q_core"])
             self.q_val = _torch.stack(backend.emle_values["q_val"])
-            self.mu = _torch.stack(backend.emle_values["mu"])
-            if use_quadrupoles:
+            if max_static_L >= 1:
+                self.mu = _torch.stack(backend.emle_values["mu"])
+            if max_static_L >= 2:
                 self.theta = _torch.stack(backend.emle_values["theta"])
 
             a_Thole = backend._mace.a_Thole
@@ -223,7 +221,7 @@ class EMLEAnalyzer:
         self.mu_vac = _torch.sum(
             (self.q_core + self.q_val)[:, :, None] * qm_xyz_bohr, dim=1
         )
-        if use_dipoles:
+        if max_static_L >= 1:
             self.mu_vac = self.mu_vac + _torch.sum(self.mu, dim=1)
 
         mask = (self.atomic_numbers > 0).unsqueeze(-1)
@@ -234,14 +232,14 @@ class EMLEAnalyzer:
             )
             * _HARTREE_TO_KCAL_MOL
         )
-        if use_dipoles:
+        if max_static_L >= 1:
             self.e_static_mu = (
                 emle_base.get_static_energy(
                     self.q_core, self.q_val, self.pc_charges, mesh_data, self.mu
                 )
                 * _HARTREE_TO_KCAL_MOL
             )
-        if use_quadrupoles:
+        if max_static_L >= 2:
             self.e_static_theta = (
                 emle_base.get_static_energy(
                     self.q_core,
@@ -279,7 +277,7 @@ class EMLEAnalyzer:
             )
             # Reference (MBIS) static energy with dipoles/quadrupoles, mirroring
             # the predicted e_static_mu / e_static_theta.
-            if use_dipoles and "mu" in parser.mbis:
+            if max_static_L >= 1 and "mu" in parser.mbis:
                 mbis_mu = _torch.tensor(
                     parser.mbis["mu"], dtype=dtype, device=device
                 )
@@ -289,7 +287,7 @@ class EMLEAnalyzer:
                     )
                     * _HARTREE_TO_KCAL_MOL
                 )
-                if use_quadrupoles and "theta" in parser.mbis:
+                if max_static_L >= 2 and "theta" in parser.mbis:
                     mbis_theta = self._theta6_to_3x3(
                         _torch.tensor(parser.mbis["theta"], dtype=dtype, device=device)
                     )

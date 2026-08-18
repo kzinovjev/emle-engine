@@ -80,15 +80,13 @@ parser.add_argument(
     help="Total charge of the QM region",
 )
 parser.add_argument(
-    "--use-dipoles",
-    action="store_true",
-    help="Whether to include static atomic dipoles",
-)
-parser.add_argument(
-    "--use-quadrupoles",
-    action="store_true",
-    help="Whether to additionally include static atomic quadrupoles "
-    "(requires --use-dipoles and the emle-mace backend)",
+    "--max-static-L",
+    type=int,
+    choices=[0, 1, 2],
+    default=0,
+    help="Highest static multipole order to include: 0 = charges only, "
+    "1 = +dipoles, 2 = +quadrupoles. Orders above 0 require the "
+    "emle-mace backend.",
 )
 
 parser.add_argument(
@@ -115,11 +113,8 @@ if args.backend == "deepmd" and not args.deepmd_model:
     parser.error("--deepmd-model is required when backend='deepmd'")
 if args.backend in ("mace", "emle-mace") and not args.mace_model:
     parser.error("--mace-model is required when backend is 'mace' or 'emle-mace'")
-if args.use_quadrupoles:
-    if not args.use_dipoles:
-        parser.error("--use-quadrupoles requires --use-dipoles")
-    if args.backend != "emle-mace":
-        parser.error("--use-quadrupoles is only supported with the emle-mace backend")
+if args.max_static_L > 0 and args.backend != "emle-mace":
+    parser.error("--max-static-L > 0 is only supported with the emle-mace backend")
 
 backend = None
 if args.backend == "torchani":
@@ -138,8 +133,7 @@ elif args.backend == "emle-mace":
         emle_model=args.emle_model,
         mace_model=args.mace_model,
         qm_charge=args.q_total,
-        use_dipoles=args.use_dipoles,
-        use_quadrupoles=args.use_quadrupoles,
+        max_static_L=args.max_static_L,
         alpha_mode=args.alpha_mode,
     )
 
@@ -162,8 +156,7 @@ analyzer = EMLEAnalyzer(
     backend,
     orca_parser,
     args.q_total,
-    args.use_dipoles,
-    use_quadrupoles=args.use_quadrupoles,
+    max_static_L=args.max_static_L,
     start=args.start,
     end=args.end,
 )
@@ -181,10 +174,10 @@ result = {
     "mu_vac_emle": analyzer.mu_vac,
     "mu_induced_emle": analyzer.mu_induced,
 }
-if args.use_dipoles:
+if args.max_static_L >= 1:
     result["mu_emle"] = analyzer.mu
     result["E_static_mu_emle"] = analyzer.e_static_mu
-if args.use_quadrupoles:
+if args.max_static_L >= 2:
     result["theta_emle"] = analyzer.theta
     result["E_static_theta_emle"] = analyzer.e_static_theta
 
@@ -202,11 +195,11 @@ if orca_parser:
             "E_static_mbis": analyzer.e_static_mbis,
         }
     )
-    if args.use_dipoles:
+    if args.max_static_L >= 1:
         result["mu_qm"] = orca_parser.mbis["mu"]
         if "e_static_mbis_mu" in analyzer.__dict__:
             result["E_static_mbis_mu"] = analyzer.e_static_mbis_mu
-    if args.use_quadrupoles:
+    if args.max_static_L >= 2:
         result["theta_qm"] = orca_parser.mbis["theta"]
         if "e_static_mbis_theta" in analyzer.__dict__:
             result["E_static_mbis_theta"] = analyzer.e_static_mbis_theta

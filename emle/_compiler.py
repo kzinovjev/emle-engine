@@ -110,7 +110,7 @@ class EMLECompiler:
         ani2x_model_index: Optional[int] = None,
         mace_model: Optional[str] = None,
         deepmd_model: Optional[str] = None,
-        use_dipoles: bool = False,
+        max_static_L: int = 0,
         device: Optional[str] = None,
     ):
         """
@@ -166,10 +166,11 @@ class EMLECompiler:
             ``.pb`` models are not scriptable and must be used through the
             runtime DeePMD backend.
 
-        use_dipoles : bool
-            Only relevant for ``backend="emle-mace"``. When ``True``, the
-            MACE-predicted atomic dipoles are included in the static
-            electrostatic energy. Must be ``False`` for any other backend.
+        max_static_L : int
+            Only relevant for ``backend="emle-mace"``. Highest static
+            multipole order included in the electrostatic energy: 0 =
+            charges only, 1 = +dipoles, 2 = +quadrupoles. Must be 0 for any
+            other backend.
 
         device : str, optional
             ``"cpu"`` or ``"cuda"``. Defaults to CPU.
@@ -180,8 +181,8 @@ class EMLECompiler:
                 f"Supported backends for compilation: {self._supported_backends}"
             )
 
-        if use_dipoles and backend != "emle-mace":
-            raise ValueError("'use_dipoles' is only valid for backend='emle-mace'.")
+        if max_static_L > 0 and backend != "emle-mace":
+            raise ValueError("'max_static_L' > 0 is only valid for backend='emle-mace'.")
 
         alpha_mode = _sanitize_alpha_mode(alpha_mode, default=None)
 
@@ -207,7 +208,7 @@ class EMLECompiler:
             ani2x_model_index=ani2x_model_index,
             mace_model=mace_model,
             deepmd_model=deepmd_model,
-            use_dipoles=use_dipoles,
+            max_static_L=max_static_L,
         )
 
     def _build_composite(
@@ -223,7 +224,7 @@ class EMLECompiler:
         ani2x_model_index,
         mace_model,
         deepmd_model,
-        use_dipoles,
+        max_static_L,
     ):
         if backend == "torchani":
             from .models import ANI2xEMLE
@@ -263,7 +264,7 @@ class EMLECompiler:
                 qm_charge=qm_charge,
                 mace_model=mace_model,
                 atomic_numbers=atomic_numbers,
-                use_dipoles=use_dipoles,
+                max_static_L=max_static_L,
                 device=self._device,
             )
 

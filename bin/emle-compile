@@ -139,11 +139,11 @@ def _build_parser():
         )
     )
     p.add_argument(
-        "--use-dipoles", action="store_true", default=False,
+        "--max-static-L", type=int, choices=[0, 1, 2], default=0,
         help=(
-            "Only valid with --backend=emle-mace. Include the "
-            "MACE-predicted atomic dipoles in the static electrostatic "
-            "energy."
+            "Highest static multipole order included in the electrostatic "
+            "energy: 0 = charges only, 1 = +dipoles, 2 = +quadrupoles. "
+            "Orders above 0 are only valid with --backend=emle-mace."
         )
     )
     p.add_argument(
@@ -192,8 +192,8 @@ def main(argv=None):
     if args.get("qm_charge") is None:
         args["qm_charge"] = 0
 
-    if args.get("use_dipoles") and args["backend"] != "emle-mace":
-        parser.error("--use-dipoles is only valid with --backend=emle-mace")
+    if args.get("max_static_L") and args["backend"] != "emle-mace":
+        parser.error("--max-static-L > 0 is only valid with --backend=emle-mace")
 
     args["atomic_numbers"] = _parse_int_list(args.get("atomic_numbers"), "atomic_numbers")
     args["mm_charges"] = _parse_float_list(args.get("mm_charges"), "mm_charges")

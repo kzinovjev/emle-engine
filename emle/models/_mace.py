@@ -740,8 +740,7 @@ class MACEEMLEJoint(_torch.nn.Module):
         qm_charge=0,
         mace_model=None,
         atomic_numbers=None,
-        use_dipoles=False,
-        use_quadrupoles=False,
+        max_static_L=0,
         alpha_mode="fixed",
         device=None,
         dtype=None,
@@ -788,18 +787,11 @@ class MACEEMLEJoint(_torch.nn.Module):
         atomic_numbers: List[int], Tuple[int], numpy.ndarray, torch.Tensor (N_ATOMS,)
             List of atomic numbers to use in the MACE model.
 
-        use_dipoles: bool
-            Whether to include the MACE-predicted atomic dipoles 'mu' in the
-            static electrostatic energy. When True, 'mu' is passed to EMLE as
-            part of the external parameters. The calculator only permits this
-            flag with the 'emle-mace' backend.
-
-        use_quadrupoles: bool
-            Whether to additionally include the MACE-predicted atomic
-            quadrupoles 'theta' in the static electrostatic energy. Requires
-            use_dipoles=True (the three supported levels are charges,
-            charges+dipoles and charges+dipoles+quadrupoles). The calculator
-            only permits this flag with the 'emle-mace' backend.
+        max_static_L: int
+            Highest static multipole order included in the electrostatic
+            embedding: 0 = MACE-predicted charges only, 1 = also the atomic
+            dipoles 'mu', 2 = also the atomic quadrupoles 'theta'. The model
+            must predict every order requested.
 
         alpha_mode: str
             How atomic polarizabilities are calculated.
@@ -1021,14 +1013,11 @@ class MACEEMLEJoint(_torch.nn.Module):
         # Set the _get_neighbor_pairs method on the instance.
         self._get_neighbor_pairs = _get_neighbor_pairs
 
-        if use_quadrupoles and not use_dipoles:
+        if max_static_L not in (0, 1, 2):
             raise ValueError(
-                "use_quadrupoles=True requires use_dipoles=True "
-                "(supported levels: charges, charges+dipoles, "
-                "charges+dipoles+quadrupoles)"
+                "max_static_L must be 0 (charges), 1 (+dipoles) or 2 (+quadrupoles)"
             )
-        self.use_dipoles = use_dipoles
-        self.use_quadrupoles = use_quadrupoles
+        self.max_static_L = int(max_static_L)
         self._flexible_alpha = _sanitize_alpha_mode(alpha_mode) == "flexible"
 
     @staticmethod
@@ -1345,14 +1334,12 @@ class MACEEMLEJoint(_torch.nn.Module):
             s = output["valence_widths"]
             q_core = output["core_charges"]
             q = output["charges"]
-            mu = output["atomic_dipoles"]
-            theta = output["atomic_quadrupoles"]
+            mu_out = output["atomic_dipoles"]
+            theta_out = output["atomic_quadrupoles"]
 
             assert s is not None
             assert q_core is not None
             assert q is not None
-            assert mu is not None
-            assert theta is not None
 
             q_val = q - q_core
 
@@ -1364,14 +1351,27 @@ class MACEEMLEJoint(_torch.nn.Module):
             self.emle_values["q_core"].append(q_core)
             self.emle_values["q_val"].append(q_val)
             self.emle_values["q"].append(q)
-            self.emle_values["mu"].append(mu)
-            self.emle_values["theta"].append(theta)
+            if mu_out is not None:
+                self.emle_values["mu"].append(mu_out)
+            if theta_out is not None:
+                self.emle_values["theta"].append(theta_out)
 
             s = s.view(1, -1)
             q_core = q_core.view(1, -1)
             q_val = q_val.view(1, -1)
-            mu = mu.view(1, -1, 3) if self.use_dipoles else None
-            theta = theta.view(1, -1, 3, 3) if self.use_quadrupoles else None
+            # Truncate the static multipole expansion at the requested order.
+            mu: Optional[Tensor] = None
+            if self.max_static_L >= 1:
+                assert (
+                    mu_out is not None
+                ), "max_static_L >= 1 but the MACE model does not predict dipoles."
+                mu = mu_out.view(1, -1, 3)
+            theta: Optional[Tensor] = None
+            if self.max_static_L >= 2:
+                assert (
+                    theta_out is not None
+                ), "max_static_L == 2 but the MACE model does not predict quadrupoles."
+                theta = theta_out.view(1, -1, 3, 3)
 
             # Per-atom flexible polarizability correction (optional).
             k_alpha: Optional[Tensor] = None
