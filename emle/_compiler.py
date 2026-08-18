@@ -184,17 +184,7 @@ class EMLECompiler:
         if max_static_L > 0 and backend != "emle-mace":
             raise ValueError("'max_static_L' > 0 is only valid for backend='emle-mace'.")
 
-        alpha_mode = _sanitize_alpha_mode(alpha_mode, default=None)
-
-        if backend == "emle-mace":
-            if alpha_mode is not None and alpha_mode != "fixed":
-                raise ValueError(
-                    "backend='emle-mace' requires alpha_mode='fixed' "
-                    "(MACEEMLEJoint hard-codes the fixed mode)."
-                )
-        else:
-            if alpha_mode is None:
-                alpha_mode = "fixed"
+        alpha_mode = _sanitize_alpha_mode(alpha_mode)
 
         self._device = _torch.device(device) if device else _torch.device("cpu")
         self._composite = self._build_composite(
@@ -260,6 +250,7 @@ class EMLECompiler:
             return MACEEMLEJoint(
                 emle_model=model,
                 emle_method=method,
+                alpha_mode=alpha_mode,
                 mm_charges=mm_charges,
                 qm_charge=qm_charge,
                 mace_model=mace_model,

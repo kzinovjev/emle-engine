@@ -187,8 +187,6 @@ def main(argv=None):
         args["backend"] = "torchani"
     if args.get("method") is None:
         args["method"] = "electrostatic"
-    # alpha_mode default is resolved inside EMLECompiler so the emle-mace
-    # backend can reject an explicit non-"fixed" choice.
     if args.get("qm_charge") is None:
         args["qm_charge"] = 0
 
